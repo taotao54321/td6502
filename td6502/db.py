@@ -40,6 +40,9 @@ class Database:
         DatabaseScript(self).exec_(script)
 
     def save_script(self, out):
+        out.write("# -*- coding: utf-8 -*-\n")
+        out.write("\n")
+
         out.write("org(0x{:04X})\n".format(self.org))
         out.write("\n")
 
