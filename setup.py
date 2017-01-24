@@ -31,9 +31,8 @@ setup(
 
     entry_points={
         "console_scripts" : (
-            #"td6502=td6502.__main__:main",
-            "td6502=td6502.disasm:main",
-            "td6502-analyze=td6502.analyze:main",
+            "td6502=td6502.__main__:dis_main",
+            "td6502-analyze=td6502.__main__:ana_main",
         ),
     },
 )

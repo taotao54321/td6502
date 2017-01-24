@@ -12,11 +12,10 @@ from . import Bank, Permission
 from .op import Op
 from .db import Database, Analysis
 from .ana import Analyzer
+from .dis import MD6502Dis
 from . import plugin
 from . import util
 
-
-ADDR_AUTO = -1
 
 class ReadAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
@@ -49,6 +48,19 @@ class DatabaseAction(argparse.Action):
 
         setattr(namespace, self.dest, db)
 
+def addr16(str_):
+    value = int(str_, base=0)
+    if not 0 <= value <= 0xFFFF:
+        raise argparse.ArgumentTypeError("invalid address: {}".format(str_))
+    return value
+
+
+#---------------------------------------------------------------------
+# analyzer
+#---------------------------------------------------------------------
+
+ADDR_AUTO = -1
+
 class PluginAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None: raise ValueError("nargs not allowed")
@@ -64,23 +76,13 @@ class PluginAction(argparse.Action):
 
         plugins.append((path, args))
 
-        #name = os.path.splitext(os.path.basename(path))[0]
-        #module = SourceFileLoader(name, path).load_module()
-        #plugins.append(module.create(args))
-
-def addr16(str_):
-    value = int(str_, base=0)
-    if not 0 <= value <= 0xFFFF:
-        raise argparse.ArgumentTypeError("invalid address: {}".format(str_))
-    return value
-
 def addr_interrupt(str_):
     if str_.lower() == "auto":
         return ADDR_AUTO
     else:
         return addr16(str_)
 
-def parse_args():
+def ana_parse_args():
     ap = argparse.ArgumentParser(description="td6502 analyzer")
     ap.add_argument("_buf", type=argparse.FileType("rb"), action=ReadAction, metavar="INFILE")
     ap.add_argument("--db", type=argparse.FileType("r"), action=DatabaseAction,
@@ -133,11 +135,11 @@ def parse_args():
 
     return args
 
-def main():
-    args = parse_args()
+def ana_main():
+    args = ana_parse_args()
 
     ops_valid = [Op.get(code).official for code in range(0x100)]
-    perms = [Permission(True, True, True) for _ in range(0x10000)]
+    perms     = [Permission(True, True, True) for _ in range(0x10000)]
 
     for plg_path, plg_args in args.plugins:
         plg_name = os.path.splitext(os.path.basename(plg_path))[0]
@@ -150,4 +152,43 @@ def main():
 
     args.db.save_script(sys.stdout)
 
-if __name__ == "__main__": main()
+
+#---------------------------------------------------------------------
+# disassembler
+#---------------------------------------------------------------------
+
+FMT_MAP = {
+    #"ca65"   : CA65Dis,
+    "md6502" : MD6502Dis,
+}
+
+def dis_parse_args():
+    ap = argparse.ArgumentParser(description="6502 disassembler")
+    ap.add_argument("_buf", type=argparse.FileType("rb"), action=ReadAction, metavar="INFILE")
+    ap.add_argument("--db", type=argparse.FileType("r"), action=DatabaseAction,
+                    help="program database")
+    ap.add_argument("--org", type=addr16,
+                    help="origin address")
+    ap.add_argument("--fmt", type=str, choices=sorted(FMT_MAP), default="md6502",
+                    help="output format")
+
+    args = ap.parse_args()
+
+    if args.db is None:
+        if args.org is None: ap.error("origin not specified")
+        args.db = Database(args.org)
+
+    # --db と --org が両方指定された場合、後者を優先(使う場面はあまりないだろうが…)
+    if args.org is not None:
+        args.db.org = args.org
+
+    if not args._buf: ap.error("input file is empty")
+    args.bank = Bank(args._buf, args.db.org)
+
+    return args
+
+def dis_main():
+    args = dis_parse_args()
+
+    dis = FMT_MAP[args.fmt]()
+    dis.dis(args.db, args.bank, sys.stdout)
