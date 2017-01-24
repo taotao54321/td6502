@@ -3,8 +3,6 @@
 
 
 import sys
-import os.path
-from importlib.machinery import SourceFileLoader
 import traceback
 import argparse
 
@@ -13,7 +11,7 @@ from .op import Op
 from .db import Database, Analysis
 from .ana import Analyzer
 from .dis import MD6502Dis
-from . import plugin
+from .plugin import Plugin
 from . import util
 
 
@@ -69,12 +67,12 @@ class PluginAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         plugins = getattr(namespace, self.dest)
 
-        path_args = values.split(":")
-        if len(path_args) > 2: raise ValueError("plugin format error")
-        path = path_args[0]
-        args = [] if len(path_args) == 1 else path_args[1].split(",")
+        identifier_args = values.split(":")
+        if len(identifier_args) > 2: raise ValueError("plugin format error")
+        identifier = identifier_args[0]
+        args       = [] if len(identifier_args) == 1 else identifier_args[1].split(",")
 
-        plugins.append((path, args))
+        plugins.append((identifier, args))
 
 def addr_interrupt(str_):
     if str_.lower() == "auto":
@@ -141,11 +139,9 @@ def ana_main():
     ops_valid = [Op.get(code).official for code in range(0x100)]
     perms     = [Permission(True, True, True) for _ in range(0x10000)]
 
-    for plg_path, plg_args in args.plugins:
-        plg_name = os.path.splitext(os.path.basename(plg_path))[0]
-        plg_module = SourceFileLoader(plg_name, plg_path).load_module()
-        plg = plg_module.create(args.db.org, len(args.bank), plg_args)
-        plugin.exec_(plg, args.db, ops_valid, perms)
+    for plg_identifier, plg_args in args.plugins:
+        plg = Plugin(plg_identifier, plg_args, args.db.org, len(args.bank))
+        plg.exec_(args.db, ops_valid, perms)
 
     analyzer = Analyzer()
     analyzer.analyze(args.db, args.bank, ops_valid, perms, args.irq)
