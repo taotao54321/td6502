@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
 
-from collections import namedtuple
-
 from .op import Op
 from . import util
 
@@ -11,24 +9,21 @@ def _operand(addr, operand):
     return operand
 
 
-_OprFmt = namedtuple("_OprFmt", ("fmt", "conv"))
-
-
 class MD6502Dis:
     _FORMATTERS = {
-        Op.Mode.NONE : _OprFmt("",            lambda a,o: None),
-        Op.Mode.IM   : _OprFmt("#${:02X}",    _operand),
-        Op.Mode.ZP   : _OprFmt("${:02X}",     _operand),
-        Op.Mode.ZPX  : _OprFmt("${:02X},x",   _operand),
-        Op.Mode.ZPY  : _OprFmt("${:02X},y",   _operand),
-        Op.Mode.AB   : _OprFmt("${:04X}",     _operand),
-        Op.Mode.ABX  : _OprFmt("${:04X},x",   _operand),
-        Op.Mode.ABY  : _OprFmt("${:04X},y",   _operand),
-        Op.Mode.IX   : _OprFmt("(${:02X},x)", _operand),
-        Op.Mode.IY   : _OprFmt("(${:02X}),y", _operand),
-        Op.Mode.REL  : _OprFmt("${:04X}",     util.rel_target),
-        Op.Mode.IND  : _OprFmt("(${:04X})",   _operand),
-        Op.Mode.BRK  : _OprFmt("#${:02X}",    _operand),
+        Op.Mode.NONE : ("",            lambda a,o: None),
+        Op.Mode.IM   : ("#${:02X}",    _operand),
+        Op.Mode.ZP   : ("${:02X}",     _operand),
+        Op.Mode.ZPX  : ("${:02X},x",   _operand),
+        Op.Mode.ZPY  : ("${:02X},y",   _operand),
+        Op.Mode.AB   : ("${:04X}",     _operand),
+        Op.Mode.ABX  : ("${:04X},x",   _operand),
+        Op.Mode.ABY  : ("${:04X},y",   _operand),
+        Op.Mode.IX   : ("(${:02X},x)", _operand),
+        Op.Mode.IY   : ("(${:02X}),y", _operand),
+        Op.Mode.REL  : ("${:04X}",     util.rel_target),
+        Op.Mode.IND  : ("(${:04X})",   _operand),
+        Op.Mode.BRK  : ("#${:02X}",    _operand),
     }
 
     def __init__(self):
@@ -65,18 +60,21 @@ class MD6502Dis:
         return False
 
     def _dis_code(self, db, addr, op, operand, out):
-        raw = "{:02X}".format(op.code)
-        if op.argsize == 1:
-            raw += " {:02X}".format(operand)
-        elif op.argsize == 2:
-            raw += " {:02X} {:02X}".format(operand & 0xFF, operand >> 8)
+        raw = self._dump_op(op, operand)
+        mne = self._mnemonic(db, addr, op, operand)
 
-        out.write("{:04X} : {}\t\t{} ".format(addr, raw, op.name))
+        out.write("{:04X} : {:<12}{}\n".format(addr, raw, mne))
 
-        fmter = MD6502Dis._FORMATTERS[op.mode]
-        value = fmter.conv(addr, operand)
-        out.write(fmter.fmt.format(value))
-        out.write("\n")
+    def _dump_op(self, op, operand):
+        buf = bytes((op.code,))
+        if op.argsize:
+            buf += util.pack_u(operand, op.argsize)
+        return " ".join("{:02X}".format(b) for b in buf)
+
+    def _mnemonic(self, db, addr, op, operand):
+        fmt, conv = MD6502Dis._FORMATTERS[op.mode]
+        mne_operand = fmt.format(conv(addr, operand))
+        return op.name + (" " + mne_operand if mne_operand else "")
 
     def _dis_data(self, db, addr, byte, out):
         out.write("{:04X} : db ${:02X}\n".format(addr, byte))

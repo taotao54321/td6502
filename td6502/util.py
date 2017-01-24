@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
 
+
+# little endian
+def pack_u(value, size):
+    return bytes(((value >> (8*i)) & 0xFF) for i in range(size))
+
+# little endian
 def unpack_u(buf):
     value = 0
     for i, b in enumerate(buf):
