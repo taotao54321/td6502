@@ -113,15 +113,15 @@ def ana_parse_args():
     if args.nmi == ADDR_AUTO:
         if not (args.bank.addr_contains(0xFFFA) and args.bank.addr_contains(0xFFFB)):
             ap.error("bank does not contain NMI vector")
-        args.nmi = util.unpack_u(bank[0xFFFA:0xFFFB+1])
+        args.nmi = util.unpack_u(args.bank[0xFFFA:0xFFFB+1])
     if args.reset == ADDR_AUTO:
         if not (args.bank.addr_contains(0xFFFC) and args.bank.addr_contains(0xFFFD)):
             ap.error("bank does not contain RESET vector")
-        args.reset = util.unpack_u(bank[0xFFFC:0xFFFD+1])
+        args.reset = util.unpack_u(args.bank[0xFFFC:0xFFFD+1])
     if args.irq == ADDR_AUTO:
         if not (args.bank.addr_contains(0xFFFE) and args.bank.addr_contains(0xFFFF)):
             ap.error("bank does not contain IRQ vector")
-        args.irq = util.unpack_u(bank[0xFFFE:0xFFFF+1])
+        args.irq = util.unpack_u(args.bank[0xFFFE:0xFFFF+1])
 
     # 割り込みアドレスは NOTCODE 指定されてない限り CODE とする
     if args.nmi is not None:
