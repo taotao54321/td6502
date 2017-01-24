@@ -30,16 +30,31 @@ class MD6502Dis:
         pass
 
     def dis(self, db, bank, out):
+        prev_code = False
+        prev_data = False
+
         addr = bank.org
         while bank.addr_contains(addr):
             if self._is_code(db, bank, addr):
+                if prev_data:
+                    out.write("\n\n")
+
                 op = Op.get(bank[addr])
                 operand = util.unpack_u(bank[addr+1:addr+1+op.argsize]) if op.argsize else None
                 self._dis_code(db, addr, op, operand, out)
+
                 next_ = addr + op.size
+                prev_code = True
+                prev_data = False
             else:
+                if prev_code:
+                    out.write("\n\n")
+
                 self._dis_data(db, addr, bank[addr], out)
+
                 next_ = addr + 1
+                prev_code = False
+                prev_data = True
 
             addr = next_
 
