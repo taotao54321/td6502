@@ -2,6 +2,7 @@
 
 
 from .op import Op
+from .db import DataType
 from . import util
 
 
@@ -72,9 +73,18 @@ class MD6502Dis:
                 next_ = addr + op.size
                 prev_exitpoint = op.code in (0x4C, 0x6C, 0x40, 0x60)
             else:
-                self._dis_data(db, addr, bank[addr], out)
+                data_type = db.data_types[addr]
+                data_size = data_type.size
 
-                next_ = addr + 1
+                # 尻切れになる場合は Byte 単位で出力
+                if not bank.addr_contains(addr + data_size - 1):
+                    data_size = 1
+                    self._dis_data_byte(db, addr, bank[addr], out)
+                else:
+                    data_buf = bank[addr:addr+data_size]
+                    self._dis_data(db, addr, data_type, data_buf, out)
+
+                next_ = addr + data_size
                 prev_exitpoint = False
 
             addr = next_
@@ -127,9 +137,9 @@ class MD6502Dis:
             base  = db.get_operand_base (addr, value)
             label = db.get_operand_label(addr, base)
 
-            # displacement が適用された場合、非配列ラベルのみを使う
+            # displacement が適用された場合、アドレスが base と一致するラベルのみを使う
             if base != value:
-                if label and label.size > 1:
+                if label and label.addr != base:
                     label = None
                 disp = value - base
             else:
@@ -144,7 +154,35 @@ class MD6502Dis:
     def _operand_str(self, addr, operand):
         pass
 
-    def _dis_data(self, db, addr, byte, out):
-        out.write("{:04X} : db ${:02X}\n".format(addr, byte))
+    def _dis_data(self, db, addr, type_, buf, out):
+        if type_ is DataType.BYTE:
+            self._dis_data_byte(db, addr, buf[0], out)
+        elif type_ is DataType.WORD:
+            value = util.unpack_u(buf)
+            self._dis_data_word(db, addr, value, out)
+        else:
+            assert False # NOTREACHED
+
+    def _dis_data_word(self, db, addr, value, out):
+        base  = db.get_operand_base (addr, value)
+        label = db.get_operand_label(addr, base)
+
+        # displacement が適用された場合、アドレスが base と一致するラベルのみを使う
+        if base != value:
+            if label and label.addr != base:
+                label = None
+            disp = value - base
+        else:
+            disp = base - label.addr if label else 0
+
+        # WORD 出力で常にラベルを使うべきかどうかは微妙だけどとりあえず…
+        base_str = label.name if label else _hex_dollar(base, 2)
+        value_str = base_str + _disp_str(disp)
+
+        out.write("{:04X} : dw {}\n".format(addr, value_str))
+
+    def _dis_data_byte(self, db, addr, value, out):
+        # BYTE の場合は displacement やラベルは考慮しない
+        out.write("{:04X} : db ${:02X}\n".format(addr, value))
 
 

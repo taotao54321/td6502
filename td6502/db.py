@@ -7,6 +7,12 @@ import enum
 def _chk_addr(addr):
     if not 0 <= addr <= 0xFFFF: raise ValueError("addr out of range")
 
+def _chk_disp(disp):
+    if not -0xFFFF <= disp <= 0xFFFF: raise ValueError("disp out of range")
+
+def _chk_name(name):
+    if not name.isidentifier(): raise ValueError("invalid label name: {}".format(name))
+
 
 class Analysis(enum.Enum):
     UNKNOWN = 1
@@ -14,9 +20,17 @@ class Analysis(enum.Enum):
     NOTCODE = 3
 
 
+class DataType(enum.Enum):
+    BYTE = (1, 1)
+    WORD = (2, 2)
+
+    def __init__(self, id_, size):
+        self.size = size
+
+
 class Label:
     def __init__(self, name, addr, size=1):
-        if not name.isidentifier(): raise ValueError("invalid label name: {}".format(name))
+        _chk_name(name)
         if not 0 <= addr <= 0xFFFF: raise ValueError("addr out of range")
         if size < 1: raise ValueError("size must be positive")
         if addr + size - 1 > 0xFFFF: raise ValueError("addr+size out of range")
@@ -113,6 +127,8 @@ class Database:
 
         self.analysis = [Analysis.UNKNOWN for _ in range(0x10000)]
 
+        self.data_types = [DataType.BYTE for _ in range(0x10000)]
+
         self._label_table   = _LabelTable()
         self._operand_hints = tuple(_OperandHint() for _ in range(0x10000))
 
@@ -150,7 +166,7 @@ class Database:
         self._label_table.clear()
 
 
-    def set_operand_disp(addr, disp):
+    def set_operand_disp(self, addr, disp):
         """アドレス addr のオペランドに対する displacement を設定。
 
         逆アセンブルの際、オペランドを (ある値) + (インデックス) で表
@@ -164,7 +180,7 @@ class Database:
         """
         self._operand_hints[addr].disp = disp
 
-    def set_operand_label(addr, name):
+    def set_operand_label(self, addr, name):
         """アドレス addr のオペランドに対するラベル名を設定。
 
         逆アセンブルの際、オペランドが自動でラベル名に変換されるが、対
@@ -229,6 +245,11 @@ class Database:
                 out.write("notcode(0x{:04X}, max_=0x{:04X})\n".format(region[0], max_))
         out.write("\n")
 
+        for addr, type_ in enumerate(self.data_types):
+            if type_ is not DataType.BYTE:
+                out.write("data(0x{:04X}, type_={})\n".format(addr, type_.name))
+        out.write("\n")
+
         labels = sorted(self._label_table.labels(), key=lambda label: label.addr)
         for label in labels:
             if label.size == 1:
@@ -288,13 +309,27 @@ class DatabaseScript:
         for addr in range(base, max_+1):
             self.db.analysis[addr] = Analysis.NOTCODE
 
+    def data(self, addr, type_=DataType.BYTE):
+        """NOTCODE 指定およびデータ型の指定。notcode() の上位互換的な関数。"""
+        _chk_addr(addr)
+        _chk_addr(addr + type_.size - 1)
+        if type_ not in DataType: raise TypeError("invalid data type")
+
+        self.db.data_types[addr] = type_
+        for addr in range(addr, addr + type_.size):
+            self.db.analysis[addr] = Analysis.NOTCODE
+
     def label(self, name, addr, size=1):
         self.db.add_label(name, addr, size)
 
     def operand_disp(self, addr, disp):
+        _chk_addr(addr)
+        _chk_disp(disp)
         self.db.set_operand_disp(addr, disp)
 
     def operand_label(self, addr, name):
+        _chk_addr(addr)
+        _chk_name(name)
         self.db.set_operand_label(addr, name)
 
     def exec_(self, script):
@@ -303,12 +338,14 @@ class DatabaseScript:
     def _namespace(self):
         FUNCS = (
             "org",
-            "code", "notcode",
+            "code", "notcode", "data",
             "label", "operand_disp", "operand_label",
         )
 
         ns = { name : getattr(self, name) for name in FUNCS }
 
+        ns["BYTE"] = DataType.BYTE
+        ns["WORD"] = DataType.WORD
         ns["OPERAND_LABEL_AUTO"] = OPERAND_LABEL_AUTO
         ns["OPERAND_LABEL_NONE"] = OPERAND_LABEL_NONE
 
