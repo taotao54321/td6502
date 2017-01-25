@@ -277,23 +277,29 @@ class Analyzer:
                 assert False # NOTREACHED
 
     def _analyze_label(self, db, bank):
-        # JSR / JMP abs の飛び先にラベルがなければ新たに振る
-        # ジャンプ元とジャンプ先がともに NOTCODE でないことが条件
+        # 以下の条件を満たす箇所にラベルがなければ新たに振る:
+        #   * バンク先頭の CODE
+        #   * JSR / JMP abs の飛び先(src, dst がともに NOTCODE でないこと)
         # これだと若干誤爆がありうると思うが、問題になるようなら後から
         # 対処を考える
-        for src in range(bank.org, bank.addr_max()-2+1):
-            if db.is_notcode(src): continue
+        for addr in range(bank.org, bank.addr_max()-2+1):
+            if addr == bank.org and db.is_code(addr):
+                self._autolabel(db, addr)
 
-            op = Op.get(bank[src])
+            if db.is_notcode(addr): continue
+
+            op = Op.get(bank[addr])
             if op.code not in (0x20, 0x4C): continue
 
-            dst = util.unpack_u(bank[src+1:src+3])
-            if db.is_notcode(dst): continue
+            dst = util.unpack_u(bank[addr+1:addr+3])
+            if not db.is_notcode(dst):
+                self._autolabel(db, dst)
 
-            # 非配列ラベルが見つからなければ新たに振る
-            label = db.get_label_by_addr(dst)
-            if not label or label.size > 1:
-                name = "L_{:04X}".format(dst)
-                db.add_label(name, dst)
+    def _autolabel(self, db, addr):
+        # アドレスの一致するラベルが見つからなければ新たに振る
+        label = db.get_label_by_addr(addr)
+        if not label or label.addr != addr:
+            name = "L_{:04X}".format(addr)
+            db.add_label(name, addr)
 
 
