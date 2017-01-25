@@ -37,6 +37,12 @@ def create(org, size, args):
     return _CdlFceux(cdl, aggressive)
 
 
+def _autolabel(db, addr):
+    label = db.get_label_by_addr(addr)
+    if not label or label.addr != addr:
+        name = "L_{:04X}".format(addr)
+        db.add_label(name, addr)
+
 class _CdlFceux:
     def __init__(self, cdl, aggressive):
         self.cdl        = cdl
@@ -50,6 +56,9 @@ class _CdlFceux:
         別していないため、これが限界)。既に NOTCODE 指定されている箇所
         には手を付けない。
 
+        また、間接呼び出しコードの先頭(NOTCODE 指定されていないこと)に
+        ラベルがなければ振る。
+
         aggressive モードがオンの場合、CDL 上でデータ(DPCM データ含む)
         とされている領域を UNKNOWN -> NOTCODE とする(既に CODE 指定さ
         れている箇所には手を付けない)。これは誤判定の可能性があること
@@ -59,6 +68,8 @@ class _CdlFceux:
         in_code     = False
         in_code_ind = False
         for i, b in enumerate(self.cdl):
+            addr = db.org + i
+
             code     = b & (1<<0)
             data     = b & (1<<1)
             code_ind = b & (1<<4)
@@ -67,18 +78,20 @@ class _CdlFceux:
 
             if self.aggressive:
                 if (not code and not code_ind) and (data or data_ind or pcm):
-                    db.change_analysis(db.org + i, _UNKNOWN, _NOTCODE)
+                    db.change_analysis(addr, _UNKNOWN, _NOTCODE)
 
             if code:
                 if not in_code:
-                    db.change_analysis(db.org + i, _UNKNOWN, _CODE)
+                    db.change_analysis(addr, _UNKNOWN, _CODE)
                     in_code = True
             else:
                 in_code = False
 
             if code_ind:
                 if not in_code_ind:
-                    db.change_analysis(db.org + i, _UNKNOWN, _CODE)
+                    db.change_analysis(addr, _UNKNOWN, _CODE)
+                    if not db.is_notcode(addr):
+                        _autolabel(db, addr)
                     in_code_ind = True
             else:
                 in_code_ind = False
