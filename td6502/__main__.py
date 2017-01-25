@@ -8,7 +8,7 @@ import argparse
 
 from . import Bank, Permission
 from .op import Op
-from .db import Database, Analysis
+from .db import Database, Analysis, DataType
 from .ana import Analyzer
 from .dis import MD6502Dis
 from .plugin import Plugin
@@ -122,6 +122,12 @@ def ana_parse_args():
 
     if not args._buf: ap.error("input file is empty")
     args.bank = Bank(args._buf, args.db.org)
+
+    # 特に初期データベースでの指定がなければ割り込みベクタは全て WORD 指定
+    if all(args.db.is_unknown(i) for i in range(0xFFFA, 0xFFFF+1)):
+        args.db.set_data_type(0xFFFA, DataType.WORD)
+        args.db.set_data_type(0xFFFC, DataType.WORD)
+        args.db.set_data_type(0xFFFE, DataType.WORD)
 
     # 必要に応じ割り込みベクタを見る
     if args.nmi == ADDR_AUTO:

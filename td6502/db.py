@@ -146,6 +146,11 @@ class Database:
         if self.analysis[addr] is from_:
             self.analysis[addr] = to
 
+    def set_data_type(self, addr, type_):
+        self.data_types[addr] = type_
+        for addr in range(addr, addr + type_.size):
+            self.analysis[addr] = Analysis.NOTCODE
+
 
     def get_label(self, name):
         return self._label_table.get_label(name)
@@ -315,9 +320,7 @@ class DatabaseScript:
         _chk_addr(addr + type_.size - 1)
         if type_ not in DataType: raise TypeError("invalid data type")
 
-        self.db.data_types[addr] = type_
-        for addr in range(addr, addr + type_.size):
-            self.db.analysis[addr] = Analysis.NOTCODE
+        self.db.set_data_type(addr, type_)
 
     def label(self, name, addr, size=1):
         self.db.add_label(name, addr, size)
