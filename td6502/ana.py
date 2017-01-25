@@ -87,6 +87,9 @@ class Analyzer:
         # pass 2: 制御フローを考慮したコード判定
         self._analyze_flow(db, bank, irq)
 
+        # pass 3: ラベル振り
+        self._analyze_label(db, bank)
+
     def _analyze_single(self, db, bank, ops_valid, perms, irq):
         """命令単位のコード判定(制御フローを考慮しない)。
 
@@ -169,8 +172,7 @@ class Analyzer:
 
     def _analyze_flow_unknown(self, db, bank, irq):
         done = 0x10000 * [False]
-        for addr in range(0x10000):
-            if not bank.addr_contains(addr): continue
+        for addr in range(bank.org, bank.addr_max()+1):
             if not db.is_unknown(addr): continue
             if done[addr]: continue
 
@@ -229,8 +231,7 @@ class Analyzer:
 
     def _analyze_flow_code(self, db, bank, irq):
         done = 0x10000 * [False]
-        for addr in range(0x10000):
-            if not bank.addr_contains(addr): continue
+        for addr in range(bank.org, bank.addr_max()+1):
             if not db.is_code(addr): continue
             if done[addr]: continue
 
@@ -274,5 +275,25 @@ class Analyzer:
                     return
             else:
                 assert False # NOTREACHED
+
+    def _analyze_label(self, db, bank):
+        # JSR / JMP abs の飛び先にラベルがなければ新たに振る
+        # ジャンプ元とジャンプ先がともに NOTCODE でないことが条件
+        # これだと若干誤爆がありうると思うが、問題になるようなら後から
+        # 対処を考える
+        for src in range(bank.org, bank.addr_max()-2+1):
+            if db.is_notcode(src): continue
+
+            op = Op.get(bank[src])
+            if op.code not in (0x20, 0x4C): continue
+
+            dst = util.unpack_u(bank[src+1:src+3])
+            if db.is_notcode(dst): continue
+
+            # 非配列ラベルが見つからなければ新たに振る
+            label = db.get_label_by_addr(dst)
+            if not label or label.size > 1:
+                name = "L_{:04X}".format(dst)
+                db.add_label(name, dst)
 
 

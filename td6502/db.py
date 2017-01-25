@@ -156,8 +156,8 @@ class Database:
         逆アセンブルの際、オペランドを (ある値) + (インデックス) で表
         現したいことがある。例えば:
 
-          lda var+1,x      ; アドレスが1ずれている場合の補正
-          dw routine-1     ; RTS Trick (https://wiki.nesdev.com/w/index.php/RTS_Trick)
+          lda var+1,x   ; アドレスが1ずれている場合の補正
+          dw routine-1  ; RTS Trick (https://wiki.nesdev.com/w/index.php/RTS_Trick)
 
         この関数でそのような指定ができる。disp はインデックスの値。例
         えば RTS Trick の場合 -1 を指定する。
