@@ -133,7 +133,7 @@ def ana_parse_args():
         if args.reset is None:
             ap.error("bank does not contain RESET vector")
     if args.irq == ADDR_AUTO:
-        args.irq = interrupt_fetch(args.irq, 0xFFFE)
+        args.irq = interrupt_fetch(args.bank, 0xFFFE)
         if args.irq is None:
             ap.error("bank does not contain IRQ vector")
 
