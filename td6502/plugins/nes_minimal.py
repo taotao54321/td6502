@@ -16,8 +16,25 @@ class _NesMinimal:
     def __init__(self): pass
 
     def update_db(self, db):
-        # TODO: I/O register label, etc.
-        pass
+        db.add_label("PPU_CTRL",   0x2000)
+        db.add_label("PPU_MASK",   0x2001)
+        db.add_label("PPU_STATUS", 0x2002)
+        db.add_label("OAM_ADDR",   0x2003)
+        db.add_label("OAM_DATA",   0x2004)
+        db.add_label("PPU_SCROLL", 0x2005)
+        db.add_label("PPU_ADDR",   0x2006)
+        db.add_label("PPU_DATA",   0x2007)
+        db.add_label("OAM_DMA",    0x4014)
+
+        db.add_label("APU_PULSE1",   0x4000, size=4)
+        db.add_label("APU_PULSE2",   0x4004, size=4)
+        db.add_label("APU_TRIANGLE", 0x4008, size=4)
+        db.add_label("APU_NOISE",    0x400C, size=4)
+        db.add_label("APU_DMC",      0x4010, size=4)
+        db.add_label("APU_STATUS",   0x4015)
+        db.add_label("APU_FRAME",    0x4017)
+
+        db.add_label("CONTROLLER", 0x4016, size=2)
 
     def update_ops_valid(self, ops_valid): pass
 

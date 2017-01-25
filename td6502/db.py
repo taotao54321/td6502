@@ -14,6 +14,97 @@ class Analysis(enum.Enum):
     NOTCODE = 3
 
 
+class Label:
+    def __init__(self, name, addr, size=1):
+        if not name.isidentifier(): raise ValueError("invalid label name: {}".format(name))
+        if not 0 <= addr <= 0xFFFF: raise ValueError("addr out of range")
+        if size < 1: raise ValueError("size must be positive")
+        if addr + size - 1 > 0xFFFF: raise ValueError("addr+size out of range")
+
+        self.name = name
+        self.addr = addr
+        self.size = size
+
+    def addrs(self):
+        return range(self.addr, self.addr + self.size)
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+class _LabelTable:
+    def __init__(self):
+        self.clear()
+
+    def has_label(self, name):
+        return name in self._name_label
+
+    def get_label(self, name):
+        if not self.has_label(name): raise KeyError(name)
+
+        return self._name_label[name]
+
+    def get_label_by_addr(self, addr, prefer=None):
+        """addr に対応するラベルを返す。
+
+        一般的には対応ラベルが複数ありうるため、ヒントとしてラベル名
+        prefer を与えることができる。prefer が指定され、かつ対応ラベル
+        にそれが含まれる場合、その名前のラベルを返す。そうでない場合、
+        非配列ラベルを優先して返す。
+
+        ラベルが1つもない場合は None を返す。
+        """
+        labels = self._addr_labels[addr]
+        if not labels: return None
+
+        if prefer is not None:
+            result = tuple(l for l in labels if l.name == prefer)
+            # 見つからなくてもエラーにはしない(ラベルテーブル変更時に
+            # 整合性を保つのが面倒なので)
+            if result:
+                return result[0]
+
+        def prefer_nonarray(label):
+            return (0, label) if label.size == 1 else (1, label)
+        result = sorted(labels, key=prefer_nonarray)
+        return result[0]
+
+    def get_labels_by_addr(self, addr):
+        return tuple(self._addr_labels[addr])
+
+    def add(self, label):
+        if self.has_label(label.name):
+            self.remove(label.name)
+
+        self._name_label[label.name] = label
+
+        for addr in label.addrs():
+            self._addr_labels[addr].append(label)
+
+    def remove(self, name):
+        label = self.get_label(name)
+
+        for addr in label.addrs():
+            labels = self._addr_labels[addr]
+            labels = [l for l in labels if l.name != name]
+
+        del self._name_label[name]
+
+    def clear(self):
+        self._name_label  = {}
+        self._addr_labels = [[] for _ in range(0x10000)]
+
+    def labels(self):
+        return self._name_label.values()
+
+OPERAND_LABEL_AUTO = 1
+OPERAND_LABEL_NONE = 2
+
+class _OperandHint:
+    def __init__(self):
+        self.disp = 0
+        self.name = OPERAND_LABEL_AUTO
+
+
 class Database:
     def __init__(self, org):
         _chk_addr(org)
@@ -21,6 +112,10 @@ class Database:
         self.org = org
 
         self.analysis = [Analysis.UNKNOWN for _ in range(0x10000)]
+
+        self._label_table   = _LabelTable()
+        self._operand_hints = tuple(_OperandHint() for _ in range(0x10000))
+
 
     def is_unknown(self, addr):
         return self.analysis[addr] is Analysis.UNKNOWN
@@ -35,8 +130,83 @@ class Database:
         if self.analysis[addr] is from_:
             self.analysis[addr] = to
 
-    def apply_script(self, in_):
-        script = in_.read()
+
+    def get_label(self, name):
+        return self._label_table.get_label(name)
+
+    def get_label_by_addr(self, addr, prefer=None):
+        return self._label_table.get_label_by_addr(addr, prefer)
+
+    def get_labels_by_addr(self, addr):
+        return self._label_table.get_labels_by_addr(addr)
+
+    def add_label(self, name, addr, size=1):
+        self._label_table.add(Label(name, addr, size))
+
+    def remove_label(self, name):
+        self._label_table.remove(name)
+
+    def clear_labels(self):
+        self._label_table.clear()
+
+
+    def set_operand_disp(addr, disp):
+        """アドレス addr のオペランドに対する displacement を設定。
+
+        逆アセンブルの際、オペランドを (ある値) + (インデックス) で表
+        現したいことがある。例えば:
+
+          lda var+1,x      ; アドレスが1ずれている場合の補正
+          dw routine-1     ; RTS Trick (https://wiki.nesdev.com/w/index.php/RTS_Trick)
+
+        この関数でそのような指定ができる。disp はインデックスの値。例
+        えば RTS Trick の場合 -1 を指定する。
+        """
+        self._operand_hints[addr].disp = disp
+
+    def set_operand_label(addr, name):
+        """アドレス addr のオペランドに対するラベル名を設定。
+
+        逆アセンブルの際、オペランドが自動でラベル名に変換されるが、対
+        応するラベルが複数あったり、ラベル名への変換を行いたくない場合
+        がある。
+
+        name にラベル名を指定するとそれが優先される(その名前の対応ラベ
+        ルが見つからない場合はデフォルトの処理となる)。
+
+        name に OPERAND_LABEL_NONE を指定するとラベル名への変換を行わ
+        ない。
+
+        name に OPERAND_LABEL_AUTO を指定するとデフォルトの処理となる。
+        """
+        self._operand_hints[addr].name = name
+
+    def get_operand_base(self, addr, operand):
+        """アドレス addr のオペランドに対するベースアドレスを返す。
+
+        displacement を考慮してベースアドレスを算出する。ベースアドレ
+        スが範囲外の値になる場合 operand をそのまま返す。
+        """
+        base = operand - self._operand_hints[addr].disp
+        if not 0 <= base <= 0xFFFF: # 範囲外になる場合 displacement を無視
+            return operand
+        else:
+            return base
+
+    def get_operand_label(self, addr, operand):
+        """アドレス addr のオペランドに対するラベルを返す。
+
+        ラベルが見つからないか、OPERAND_LABEL_NONE が指定されている場
+        合 None を返す。
+        """
+        name = self._operand_hints[addr].name
+        if name == OPERAND_LABEL_NONE: return None
+
+        prefer = name if name != OPERAND_LABEL_AUTO else None
+        return self._label_table.get_label_by_addr(operand, prefer)
+
+
+    def apply_script(self, script):
         DatabaseScript(self).exec_(script)
 
     def save_script(self, out):
@@ -57,6 +227,25 @@ class Database:
             else:
                 max_ = region[0] + region[1] - 1
                 out.write("notcode(0x{:04X}, max_=0x{:04X})\n".format(region[0], max_))
+        out.write("\n")
+
+        labels = sorted(self._label_table.labels(), key=lambda label: label.addr)
+        for label in labels:
+            if label.size == 1:
+                out.write("label({}, 0x{:04X})\n".format(
+                    repr(label.name), label.addr))
+            else:
+                out.write("label({}, 0x{:04X}, size={:d})\n".format(
+                    repr(label.name), label.addr, label.size))
+        out.write("\n")
+
+        for addr, hint in enumerate(self._operand_hints):
+            if hint.disp:
+                out.write("operand_disp(0x{:04X}, {:d})\n".format(addr, hint.disp))
+            if hint.name == OPERAND_LABEL_NONE:
+                out.write("operand_label(0x{:04X}, OPERAND_LABEL_NONE)\n")
+            elif hint.name != OPERAND_LABEL_AUTO:
+                out.write("operand_label(0x{:04X}, {}\n".format(addr, repr(hint.name)))
         out.write("\n")
 
     def _regions_notcode(self):
@@ -99,6 +288,15 @@ class DatabaseScript:
         for addr in range(base, max_+1):
             self.db.analysis[addr] = Analysis.NOTCODE
 
+    def label(self, name, addr, size=1):
+        self.db.add_label(name, addr, size)
+
+    def operand_disp(self, addr, disp):
+        self.db.set_operand_disp(addr, disp)
+
+    def operand_label(self, addr, name):
+        self.db.set_operand_label(addr, name)
+
     def exec_(self, script):
         exec(script, self._namespace())
 
@@ -106,5 +304,12 @@ class DatabaseScript:
         FUNCS = (
             "org",
             "code", "notcode",
+            "label", "operand_disp", "operand_label",
         )
-        return { name : getattr(self, name) for name in FUNCS }
+
+        ns = { name : getattr(self, name) for name in FUNCS }
+
+        ns["OPERAND_LABEL_AUTO"] = OPERAND_LABEL_AUTO
+        ns["OPERAND_LABEL_NONE"] = OPERAND_LABEL_NONE
+
+        return ns

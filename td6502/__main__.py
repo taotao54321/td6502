@@ -39,10 +39,12 @@ class DatabaseAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         db = Database(0)
         with values as in_:
-            try:
-                db.apply_script(in_)
-            except:
-                parser.error(traceback.format_exc())
+            script = in_.read()
+
+        try:
+            db.apply_script(script)
+        except:
+            parser.error(traceback.format_exc())
 
         setattr(namespace, self.dest, db)
 
@@ -80,6 +82,18 @@ def addr_interrupt(str_):
     else:
         return addr16(str_)
 
+def interrupt_fetch(bank, addr):
+    if bank.addr_contains(addr) and bank.addr_contains(addr+1):
+        return util.unpack_u(bank[addr:addr+2])
+    else:
+        return None
+
+def interrupt_register(db, name, addr):
+    # NOTCODE 指定されてない限り CODE とし、ラベルが振られていなければ振る
+    db.change_analysis(addr, Analysis.UNKNOWN, Analysis.CODE)
+    if db.is_code(addr) and not db.get_label_by_addr(addr):
+        db.add_label(name, addr)
+
 def ana_parse_args():
     ap = argparse.ArgumentParser(description="td6502 analyzer")
     ap.add_argument("_buf", type=argparse.FileType("rb"), action=ReadAction, metavar="INFILE")
@@ -111,25 +125,24 @@ def ana_parse_args():
 
     # 必要に応じ割り込みベクタを見る
     if args.nmi == ADDR_AUTO:
-        if not (args.bank.addr_contains(0xFFFA) and args.bank.addr_contains(0xFFFB)):
+        args.nmi = interrupt_fetch(args.bank, 0xFFFA)
+        if args.nmi is None:
             ap.error("bank does not contain NMI vector")
-        args.nmi = util.unpack_u(args.bank[0xFFFA:0xFFFB+1])
     if args.reset == ADDR_AUTO:
-        if not (args.bank.addr_contains(0xFFFC) and args.bank.addr_contains(0xFFFD)):
+        args.reset = interrupt_fetch(args.bank, 0xFFFC)
+        if args.reset is None:
             ap.error("bank does not contain RESET vector")
-        args.reset = util.unpack_u(args.bank[0xFFFC:0xFFFD+1])
     if args.irq == ADDR_AUTO:
-        if not (args.bank.addr_contains(0xFFFE) and args.bank.addr_contains(0xFFFF)):
+        args.irq = interrupt_fetch(args.irq, 0xFFFE)
+        if args.irq is None:
             ap.error("bank does not contain IRQ vector")
-        args.irq = util.unpack_u(args.bank[0xFFFE:0xFFFF+1])
 
-    # 割り込みアドレスは NOTCODE 指定されてない限り CODE とする
     if args.nmi is not None:
-        args.db.change_analysis(args.nmi, Analysis.UNKNOWN, Analysis.CODE)
+        interrupt_register(args.db, "NMI", args.nmi)
     if args.reset is not None:
-        args.db.change_analysis(args.reset, Analysis.UNKNOWN, Analysis.CODE)
+        interrupt_register(args.db, "RESET", args.reset)
     if args.irq is not None:
-        args.db.change_analysis(args.irq, Analysis.UNKNOWN, Analysis.CODE)
+        interrupt_register(args.db, "IRQ", args.irq)
 
     return args
 

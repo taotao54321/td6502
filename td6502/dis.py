@@ -5,25 +5,32 @@ from .op import Op
 from . import util
 
 
+def _hex_dollar(value, size):
+    fmt = "${{:0{}X}}".format(2 * size)
+    return fmt.format(value)
+
+def _disp_str(disp):
+    return "{:+d}".format(disp) if disp else ""
+
 def _operand(addr, operand):
     return operand
 
 
 class MD6502Dis:
-    _FORMATTERS = {
-        Op.Mode.NONE : ("",            lambda a,o: None),
-        Op.Mode.IM   : ("#${:02X}",    _operand),
-        Op.Mode.ZP   : ("${:02X}",     _operand),
-        Op.Mode.ZPX  : ("${:02X},x",   _operand),
-        Op.Mode.ZPY  : ("${:02X},y",   _operand),
-        Op.Mode.AB   : ("${:04X}",     _operand),
-        Op.Mode.ABX  : ("${:04X},x",   _operand),
-        Op.Mode.ABY  : ("${:04X},y",   _operand),
-        Op.Mode.IX   : ("(${:02X},x)", _operand),
-        Op.Mode.IY   : ("(${:02X}),y", _operand),
-        Op.Mode.REL  : ("${:04X}",     util.rel_target),
-        Op.Mode.IND  : ("(${:04X})",   _operand),
-        Op.Mode.BRK  : ("#${:02X}",    _operand),
+    _FMTS = {
+        Op.Mode.NONE : "",
+        Op.Mode.IM   : "#{}",
+        Op.Mode.ZP   : "{}",
+        Op.Mode.ZPX  : "{},x",
+        Op.Mode.ZPY  : "{},y",
+        Op.Mode.AB   : "{}",
+        Op.Mode.ABX  : "{},x",
+        Op.Mode.ABY  : "{},y",
+        Op.Mode.IX   : "({},x)",
+        Op.Mode.IY   : "({}),y",
+        Op.Mode.REL  : "{}",
+        Op.Mode.IND  : "({})",
+        Op.Mode.BRK  : "#{}",
     }
 
     def __init__(self):
@@ -35,9 +42,16 @@ class MD6502Dis:
 
         addr = bank.org
         while bank.addr_contains(addr):
+            label = db.get_label_by_addr(addr)
+            if label and label.addr != addr:
+                label = None
+
             if self._is_code(db, bank, addr):
                 if prev_data:
                     out.write("\n\n")
+
+                if label:
+                    out.write("{}:\n".format(label.name))
 
                 op = Op.get(bank[addr])
                 operand = util.unpack_u(bank[addr+1:addr+1+op.argsize]) if op.argsize else None
@@ -49,6 +63,9 @@ class MD6502Dis:
             else:
                 if prev_code:
                     out.write("\n\n")
+
+                if label:
+                    out.write("{}:\n".format(label.name))
 
                 self._dis_data(db, addr, bank[addr], out)
 
@@ -87,9 +104,39 @@ class MD6502Dis:
         return " ".join("{:02X}".format(b) for b in buf)
 
     def _mnemonic(self, db, addr, op, operand):
-        fmt, conv = MD6502Dis._FORMATTERS[op.mode]
-        mne_operand = fmt.format(conv(addr, operand))
+        fmt = MD6502Dis._FMTS[op.mode]
+
+        if op.mode is Op.Mode.REL:
+            value      = util.rel_target(addr, operand)
+            value_size = 2
+        else:
+            value      = operand
+            value_size = op.argsize
+
+        if op.mode is Op.Mode.NONE:
+            mne_operand = ""
+        elif op.mode in (Op.Mode.IM, Op.Mode.BRK):
+            mne_operand = fmt.format(_hex_dollar(value, value_size))
+        else:
+            base  = db.get_operand_base (addr, value)
+            label = db.get_operand_label(addr, base)
+
+            # displacement が適用された場合、非配列ラベルのみを使う
+            if base != value:
+                if label and label.size > 1:
+                    label = None
+                disp = value - base
+            else:
+                disp = base - label.addr if label else 0
+
+            base_str = label.name if label else _hex_dollar(base, value_size)
+            value_str = base_str + _disp_str(disp)
+            mne_operand = fmt.format(value_str)
+
         return op.name + (" " + mne_operand if mne_operand else "")
+
+    def _operand_str(self, addr, operand):
+        pass
 
     def _dis_data(self, db, addr, byte, out):
         out.write("{:04X} : db ${:02X}\n".format(addr, byte))
