@@ -37,43 +37,49 @@ class MD6502Dis:
         pass
 
     def dis(self, db, bank, out):
-        prev_code = False
-        prev_data = False
+        prev_code      = False
+        prev_data      = False
+        prev_exitpoint = False
 
         addr = bank.org
         while bank.addr_contains(addr):
+            code = self._is_code(db, bank, addr)
+
+            # 非配列ラベルを取得
             label = db.get_label_by_addr(addr)
             if label and label.addr != addr:
                 label = None
 
-            if self._is_code(db, bank, addr):
-                if prev_data:
-                    out.write("\n\n")
+            # 以下の場合に空行挿入:
+            #   * コード/データ境界
+            #   * コード終端要素と非配列ラベルの境界
+            # 「コード終端要素」とは、JMP abs / JMP ind / RTS / RTI を指す。
+            #
+            # 後者は一応ルーチン分割のつもりだが、完璧ではないと思われ
+            # る。ただしこれは人手でやっても判然としないケースもあるの
+            # で多少の誤りは許容する方向で。
+            if (code and prev_data) or (not code and prev_code) or (prev_exitpoint and label):
+                out.write("\n\n")
 
-                if label:
-                    out.write("{}:\n".format(label.name))
+            if label:
+                out.write("{}:\n".format(label.name))
 
+            if code:
                 op = Op.get(bank[addr])
                 operand = util.unpack_u(bank[addr+1:addr+1+op.argsize]) if op.argsize else None
                 self._dis_code(db, addr, op, operand, out)
 
                 next_ = addr + op.size
-                prev_code = True
-                prev_data = False
+                prev_exitpoint = op.code in (0x4C, 0x6C, 0x40, 0x60)
             else:
-                if prev_code:
-                    out.write("\n\n")
-
-                if label:
-                    out.write("{}:\n".format(label.name))
-
                 self._dis_data(db, addr, bank[addr], out)
 
                 next_ = addr + 1
-                prev_code = False
-                prev_data = True
+                prev_exitpoint = False
 
             addr = next_
+            prev_code = code
+            prev_data = not code
 
     def _is_code(self, db, bank, addr):
         """コードとして出力すべきかどうかの判定。"""
