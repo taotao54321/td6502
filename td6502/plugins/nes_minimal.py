@@ -44,12 +44,12 @@ class _NesMinimal:
             perms[i].executable = False
 
         # write-only registers
-        for i in (0x2000, 0x3FFF+1, 8):
-            perms[0x2000+i].readable = False
-            perms[0x2001+i].readable = False
-            perms[0x2003+i].readable = False
-            perms[0x2005+i].readable = False
-            perms[0x2006+i].readable = False
+        for i in range(0x2000, 0x3FFF+1, 8):
+            perms[i+0].readable = False
+            perms[i+1].readable = False
+            perms[i+3].readable = False
+            perms[i+5].readable = False
+            perms[i+6].readable = False
         perms[0x4000].readable = False
         perms[0x4001].readable = False
         perms[0x4002].readable = False
@@ -71,8 +71,8 @@ class _NesMinimal:
         perms[0x4014].readable = False
 
         # read-only registers
-        for i in (0x2000, 0x3FFF+1, 8):
-            perms[0x2002+i].writable = False
+        for i in range(0x2000, 0x3FFF+1, 8):
+            perms[i+2].writable = False
 
         # $4009 and $400D are unused, but eventually accessed in memory-clearing loops
         # http://wiki.nesdev.com/w/index.php/2A03
