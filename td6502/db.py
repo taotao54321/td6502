@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import re
 import enum
 
 
@@ -119,6 +120,38 @@ class _OperandHint:
         self.name = OPERAND_LABEL_AUTO
 
 
+class Comment:
+    _RE_BEGIN_MULTI = re.compile(r"^", re.MULTILINE)
+    _RE_BEGIN       = re.compile(r"^")
+    def __init__(self):
+        self._head = None
+        self._tail = None
+
+    @property
+    def head(self):
+        return self._head
+
+    @head.setter
+    def head(self, str_):
+        self._head = str_
+
+    @property
+    def tail(self):
+        return self._tail
+
+    @tail.setter
+    def tail(self, str_):
+        if any(c in str_ for c in "\r\n"):
+            raise ValueError("tail comment cannot contain newline chars")
+        self._tail = str_
+
+    def head_fmt(self, comm_char=";"):
+        return Comment._RE_BEGIN_MULTI.sub(comm_char+" ", self.head.rstrip())
+
+    def tail_fmt(self, comm_char=";"):
+        return Comment._RE_BEGIN.sub(comm_char+" ", self.tail.rstrip())
+
+
 class Database:
     def __init__(self, org):
         _chk_addr(org)
@@ -131,6 +164,8 @@ class Database:
 
         self._label_table   = _LabelTable()
         self._operand_hints = tuple(_OperandHint() for _ in range(0x10000))
+
+        self.comments = [Comment() for _ in range(0x10000)]
 
 
     def is_unknown(self, addr):
@@ -335,6 +370,12 @@ class DatabaseScript:
         _chk_name(name)
         self.db.set_operand_label(addr, name)
 
+    def comment_head(self, addr, head):
+        self.db.comments[addr].head = head
+
+    def comment_tail(self, addr, tail):
+        self.db.comments[addr].tail = tail
+
     def exec_(self, script):
         exec(script, self._namespace())
 
@@ -343,6 +384,7 @@ class DatabaseScript:
             "org",
             "code", "notcode", "data",
             "label", "operand_disp", "operand_label",
+            "comment_head", "comment_tail",
         )
 
         ns = { name : getattr(self, name) for name in FUNCS }
