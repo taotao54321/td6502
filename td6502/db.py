@@ -349,13 +349,19 @@ class DatabaseScript:
         for addr in range(base, max_+1):
             self.db.analysis[addr] = Analysis.NOTCODE
 
-    def data(self, addr, type_=DataType.BYTE):
+    def data(self, base, type_=DataType.BYTE, *, max_=None, count=1):
         """NOTCODE 指定およびデータ型の指定。notcode() の上位互換的な関数。"""
-        _chk_addr(addr)
-        _chk_addr(addr + type_.size - 1)
+        _chk_addr(base)
         if type_ not in DataType: raise TypeError("invalid data type")
+        if max_ is None:
+            if count < 1: raise ValueError("count must be positive")
+            max_ = base + type_.size * count - 1
+        _chk_addr(max_)
+        if max_ < base: raise ValueError("max_ < base")
+        if (max_ - base + 1) % type_.size: raise ValueError("indivisible")
 
-        self.db.set_data_type(addr, type_)
+        for addr in range(base, max_+1, type_.size):
+            self.db.set_data_type(addr, type_)
 
     def label(self, name, addr, size=1):
         self.db.add_label(name, addr, size)
