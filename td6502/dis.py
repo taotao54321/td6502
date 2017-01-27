@@ -46,20 +46,22 @@ class MD6502Dis:
         while bank.addr_contains(addr):
             code = self._is_code(db, bank, addr)
 
-            # 非配列ラベルを取得
+            # ラベル取得(配列ラベルの場合、開始点のみ)
             label = db.get_label_by_addr(addr)
             if label and label.addr != addr:
                 label = None
 
             # 以下の場合に空行挿入:
             #   * コード/データ境界
-            #   * コード終端要素と非配列ラベルの境界
+            #   * コード終端要素とラベルの境界
+            #   * データとラベルの境界
             # 「コード終端要素」とは、JMP abs / JMP ind / RTS / RTI を指す。
             #
             # 後者は一応ルーチン分割のつもりだが、完璧ではないと思われ
             # る。ただしこれは人手でやっても判然としないケースもあるの
             # で多少の誤りは許容する方向で。
-            if (code and prev_data) or (not code and prev_code) or (prev_exitpoint and label):
+            if (code and prev_data) or (not code and prev_code) or\
+               (prev_exitpoint and label) or (prev_data and label):
                 out.write("\n\n")
 
             comm = db.comments[addr]
