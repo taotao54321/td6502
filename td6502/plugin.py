@@ -46,9 +46,9 @@ class Plugin:
     @staticmethod
     def _load_by_name(name):
         relative = "..{}.{}".format(_PLUGIN_PACKAGE, name)
-        spec = importlib.util.find_spec(relative, __name__)
-        if not spec: return None
         try:
+            spec = importlib.util.find_spec(relative, __name__)
+            if not spec: return None
             return spec.loader.load_module()
         except Exception:
             return None
