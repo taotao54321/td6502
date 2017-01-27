@@ -363,8 +363,15 @@ class DatabaseScript:
         for addr in range(base, max_+1, type_.size):
             self.db.set_data_type(addr, type_)
 
-    def label(self, name, addr, size=1):
-        self.db.add_label(name, addr, size)
+    def label(self, name, base, *, max_=None, size=1):
+        _chk_addr(base)
+        if max_ is None:
+            if size < 1: raise ValueError("size must be positive")
+            max_ = base + size - 1
+        _chk_addr(max_)
+        if max_ < base: raise ValueError("max_ < base")
+
+        self.db.add_label(name, base, size)
 
     def operand_disp(self, addr, disp):
         _chk_addr(addr)
