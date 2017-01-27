@@ -92,8 +92,8 @@ class MD6502Dis:
                 next_ = addr + data_size
                 prev_exitpoint = False
 
-            if comm.tail is not None:
-                out.write(" " + comm.tail_fmt())
+            out.write(" ")
+            out.write(comm.tail_fmt() if comm.tail is not None else ";")
             out.write("\n")
 
             addr = next_
@@ -120,7 +120,7 @@ class MD6502Dis:
         raw = self._dump_op(op, operand)
         mne = self._mnemonic(db, addr, op, operand)
 
-        out.write("{:04X} : {:<12}{}".format(addr, raw, mne))
+        out.write("{:04X} : {:<12}{:<20}".format(addr, raw, mne))
 
     def _dump_op(self, op, operand):
         buf = bytes((op.code,))
@@ -188,7 +188,7 @@ class MD6502Dis:
         base_str = label.name if label else _hex_dollar(base, 2)
         value_str = base_str + _disp_str(disp)
 
-        out.write("{:04X} : dw {}".format(addr, value_str))
+        out.write("{:04X} : dw {:<10}".format(addr, value_str))
 
     def _dis_data_byte(self, db, addr, value, out):
         # BYTE の場合は displacement やラベルは考慮しない
