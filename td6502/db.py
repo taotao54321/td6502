@@ -380,7 +380,8 @@ class DatabaseScript:
 
     def operand_label(self, addr, name):
         _chk_addr(addr)
-        _chk_name(name)
+        if name not in (OPERAND_LABEL_AUTO, OPERAND_LABEL_NONE):
+            _chk_name(name)
         self.db.set_operand_label(addr, name)
 
     def comment_head(self, addr, head):
