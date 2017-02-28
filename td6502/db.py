@@ -145,7 +145,11 @@ class Comment:
 
     def head_fmt(self, comm_char=";"):
         lines = self.head.rstrip().splitlines()
-        return "\n".join(Comment._head_fmt_one(line, comm_char) for line in lines)
+
+        if lines:
+            return "\n".join(Comment._head_fmt_one(line, comm_char) for line in lines)
+        else:
+            return comm_char
 
     @staticmethod
     def _head_fmt_one(line, comm_char):
