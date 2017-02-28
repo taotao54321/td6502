@@ -121,8 +121,6 @@ class _OperandHint:
 
 
 class Comment:
-    _RE_BEGIN_MULTI = re.compile(r"^", re.MULTILINE)
-    _RE_BEGIN       = re.compile(r"^")
     def __init__(self):
         self._head = None
         self._tail = None
@@ -146,10 +144,18 @@ class Comment:
         self._tail = str_
 
     def head_fmt(self, comm_char=";"):
-        return Comment._RE_BEGIN_MULTI.sub(comm_char+" ", self.head.rstrip())
+        lines = self.head.rstrip().splitlines()
+        return "\n".join(Comment._head_fmt_one(line, comm_char) for line in lines)
+
+    @staticmethod
+    def _head_fmt_one(line, comm_char):
+        space_maybe = " " if line else ""
+        return comm_char + space_maybe + line
 
     def tail_fmt(self, comm_char=";"):
-        return Comment._RE_BEGIN.sub(comm_char+" ", self.tail.rstrip())
+        tail = self.tail.rstrip()
+        space_maybe = " " if tail else ""
+        return comm_char + space_maybe + tail
 
 
 class Database:
