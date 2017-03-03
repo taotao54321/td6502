@@ -381,6 +381,7 @@ class DatabaseScript:
         _chk_addr(max_)
         if max_ < base: raise ValueError("max_ < base")
 
+        size = max_ - base + 1
         self.db.add_label(name, base, size)
 
     def operand_disp(self, addr, disp):
