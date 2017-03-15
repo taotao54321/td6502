@@ -6,7 +6,7 @@
 """
 
 
-def create(args):
+def create(org, size, args):
     return _AllOp()
 
 
