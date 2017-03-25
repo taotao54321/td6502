@@ -24,7 +24,7 @@ class Plugin:
 
         if module is None: raise PluginLoadError("cannot load {}".format(identifier))
 
-        self.instance= module.create(org, size, args)
+        self.instance = module.create(org, size, args)
 
     def exec_(self, db, ops_valid, perms):
         self.instance.update_db(db)
