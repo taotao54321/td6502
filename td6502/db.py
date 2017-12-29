@@ -400,6 +400,10 @@ class DatabaseScript:
     def comment_tail(self, addr, tail):
         self.db.comments[addr].tail = tail
 
+    def include(self, path):
+        with open(path, "r") as in_:
+            exec(in_.read(), self._namespace())
+
     def exec_(self, script):
         exec(script, self._namespace())
 
@@ -409,6 +413,7 @@ class DatabaseScript:
             "code", "notcode", "data",
             "label", "operand_disp", "operand_label",
             "comment_head", "comment_tail",
+            "include",
         )
 
         ns = { name : getattr(self, name) for name in FUNCS }
